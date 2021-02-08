@@ -3,7 +3,7 @@
 
 # looping in r 
 # by list of any thing
-df <- read.csv("Path/AllegBu _Full.csv")
+df <- read.csv("Path/file.csv")
 # get list of cites by unique
 Cities  <- unique(df$Physical.City)
 # Loop through the data frame and extract each city .
@@ -12,6 +12,7 @@ Cities  <- unique(df$Physical.City)
 for(i in Cities) {
   
   df1 <- df[(df$Physical.City %in% c(i)), ]
+  # write any selection line for fileds and save it to the df1
   write.csv (df1, paste(i,"-City",".csv"), row.names = FALSE)
 
 }
