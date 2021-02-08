@@ -1,9 +1,9 @@
+#Imported Feb 8/2021
 #This is to extract data form the file using any field 
 
 # looping in r 
 # by list of any thing
-
-df <- read.csv("C:/Users/Belachew/Desktop/Mergent2018/AllegMI/AllegBu _Full.csv")
+df <- read.csv("Path/AllegBu _Full.csv")
 # get list of cites by unique
 Cities  <- unique(df$Physical.City)
 # Loop through the data frame and extract each city .
