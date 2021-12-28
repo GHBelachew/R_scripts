@@ -1,0 +1,92 @@
+# =====================================================================
+# R Scripting
+# This a template script to extract Mergent Intellect Data for Data requests.
+#======================================================================
+
+# Loading libraries == Note: some libraries will may not be needed but keep the list
+library(data.table)
+library(rgdal) # Bindings for the Geospatial Data Abstraction Library
+library(raster) # Geographic Data Analysis and Modeling
+library(rgeos) # Interface to Geometry Engine - Open Source (GEOS)
+library(ggmap)
+library(ggplot2)
+library(sf)
+library(sp)
+library(maptools) # to create shape file
+library(tmap)
+library(dplyr)
+library(reshape2)
+library(reshape)
+library(plyr)
+
+#=========================================================================
+# Reading Data ; path of data file and name of data source are subject to change
+
+df <- read.csv("Path/SourceData.csv")
+
+#========================================================================    
+#Data Preprocessing and Prep
+# Change employment from factor to character and then to numeric by removing the comma
+
+df$EmThisS <- as.character(df$EmThisS)
+df$EmThisS <- gsub(",", "", df$EmThisS)
+df$EmThisS <- as.numeric(df$EmThisS)
+
+# change SalesY1 from factor to character and then to numeric by removing the comma and Dollar sign
+
+df$SalesYR1 <- as.character(df$SalesYR1)
+df$SalesYR1 <- gsub(",", "", df$SalesYR1)
+df$SalesYR1 <- gsub("\\$", "", df$SalesYR1)
+df$SalesYR1 <- as.numeric(df$SalesYR1)
+#========================================================================
+# Extract needed fields for the request
+
+df2 <- df[ , c("ID",
+                          "DUNNoV",
+                          "Company",
+                          "LineOfBu",
+                          "StAdrs",
+                          "StCity",
+                          "StState",
+                          "StZip",
+                          "MailAdrs",
+                          "MailCity",
+                          "MailSta",
+                          "MailCo",
+                          "MailZip",
+                          "PrmNAICS",
+                          "PrNAICSD",
+                          "EmThisS",
+                          "SalesYR1",
+                          "FinalLat",
+                          "FinalLon",
+                          "COName")]
+# Extract needed counties (This list is dependent on the request
+df3 <- subset(df2,df2$COName %in% c("County1", "County2","County3","County4"))
+
+## Testing Summaries (count of number of business and employment)
+# setDT(df3)
+# df3[, .(`Count` = .N), by = COName]
+# aggregate(EmThisS ~ COName, data=df3, FUN=sum)
+
+#==========================================================================
+# Mapping the file,  to check if the coordinates are correct
+# get zone shape file(merlam shape file)
+Zone <- readOGR(dsn = "Path", layer = "shafilename") 
+# set projection to WGS84
+Zoneproj <- spTransform(zone,CRS("+proj=longlat +ellips=WGS84"))
+
+
+df3_plt <- SpatialPointsDataFrame(df3[ ,c("FinalLon","FinalLat")], df3,
+                                   proj4string = CRS("+proj=longlat +ellips=WGS84"))
+
+plot(zoneproj)
+plot(df3_plt,add=TRUE)
+							   
+#==========================================================================
+# Export data and shape
+write.csv(df3, "Path/OutPutName.csv", row.names = F)
+writeOGR(df3_plt, layer = 'OutPutName','Path',driver="ESRI Shapefile")
+
+# Add other commands as needed
+#===================================END====================================

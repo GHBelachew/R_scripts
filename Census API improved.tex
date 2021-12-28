@@ -1,0 +1,400 @@
+## Please run this script
+## You don't need to look into details
+
+## Open the package
+library(XML) ## Tools for Parsing and Generating XML Within R and S-Plus
+library(RCurl) ## General Network (HTTP/FTP/...) Client Interface for R
+library(httr) ## Tools for Working with URLs and HTTP
+library(stringr) ## Simple, Consistent Wrappers for Common String Operations
+library(rjson) ## JSON for R
+library(tm) ## Text Mining Package
+library(RJSONIO) ## Serialize R objects to JSON, JavaScript Object Notation
+library(r2excel) ## Read, write and format Excel files in R
+
+## Get Datasets
+CensusAPI_url <- 'http://api.census.gov/data.html'
+CensusAPI_urldata <- GET(CensusAPI_url) ## Get the structure of the dataset html
+datasets <- readHTMLTable(rawToChar(CensusAPI_urldata$content), header = TRUE, stringsAsFactors = FALSE) ## read the table in html
+datasets <- as.data.frame(datasets) ## change to a data frame
+colnames(datasets) <- c("Title", "Description", "Vintage", "Dataset Name", "Geography List", 
+                        "Variable List", "Tag List", "Examples", "Developer Documentation", "API BASE URL") ## rename the column name
+write.csv(datasets, "Census API_Datasets and its descendants.csv", row.names = FALSE, na = "")
+
+## A function to show datasets
+showDatasets <- function(datasets) {
+  View(datasets)
+}
+
+## A function to choose Dataset
+chooseOneDataset_showVariable<- function(x){
+  index <- x ## You might need to change this value
+  basicurl <- datasets$`API BASE URL`[index] ## Get basic url for api of this dataset
+  variableurl <- paste(basicurl, '/variables.html') ## generate an url to get variables
+  variableurl <- str_replace_all(variableurl, " ", "")## remove the space in variableurl
+  variableurl_data <- GET(variableurl) ## get the structure and content of variables html
+  variables <- readHTMLTable(rawToChar(variableurl_data$content), stringAsFactors = FALSE) ## read the table in HTML
+  variables <- as.data.frame(variables) ## change to a data frame
+  colnames(variables) <- c("Name", "Label", "Concept", "Required", "Predicate") ## Rename
+  ## Change each column to character
+  variables$Name <- as.character(variables$Name)
+  variables$Label <- as.character(variables$Label)
+  variables$Concept <- as.character(variables$Concept)
+  variables$Required <- as.character(variables$Required)
+  variables$Predicate <- as.character(variables$Predicate)
+  write.csv(variables, "variables.csv", row.names = FALSE, na="")
+  View(variables)
+}
+
+anyRequiredVariable <- function() {
+  variables <- read.csv("variables.csv", header = TRUE, stringsAsFactors = FALSE)
+  Required_variable <- variables[variables$Required %in% c("required"),] ## find the required variable
+  if (nrow(Required_variable) == 0) {
+    print("No Required Variable in this dataset.")
+  } else {
+    print(row.names(Required_variable)) ## print out the index
+  }
+}
+
+downloadDatain10 <- function() {
+  variables <- read.csv("variables.csv", header = TRUE, stringsAsFactors = FALSE)
+  variablesubset <- variables[rownames(variables) %in% variable_index,] ## Get the subset from all varibels
+  variables <- variablesubset$Name ## Select out the Name column
+  variables_name <- "" ## Define a string
+  ## create the variable
+  for (i in 1:length(variables)) {
+    variables_name <- paste(variables_name,",",variables[i])
+  }
+  variables_name <- str_replace_all(variables_name, " ", "") ## remove space
+  variables_name <- substr(variables_name,2, nchar(variables_name)) ## get the variables string for api
+  geography <- 'county:003,005,007,019,051,059,063,073,125,129&in=state:42'
+  url <- paste(basicurl,'?get=',variables_name,'&for=',geography,'&key=',key) ## Generate the url
+  url <- str_replace_all(url, " ", "") ## remove the space
+  json_file <- fromJSON(getURL(paste(url,sep="")))
+  ## us NA instead null
+  json_file <- lapply(json_file, function(x) {
+    x[sapply(x, is.null)] <- NA
+    unlist(x)
+  })
+  data <- do.call("rbind", json_file) ## change to data frame
+  colnames(data) <- c(data[1,]) ## set the first row as column name
+  data <- data[-1,] ## remove the first row
+  data <- as.data.frame(data)
+  data$state_name <- "PA"
+  data$county_name[data$county %in% c("003")] <- "Allegheny"
+  data$county_name[data$county %in% c("005")] <- "Armstrong"
+  data$county_name[data$county %in% c("007")] <- "Beaver"
+  data$county_name[data$county %in% c("019")] <- "Butler"
+  data$county_name[data$county %in% c("051")] <- "Fayette"
+  data$county_name[data$county %in% c("059")] <- "Greene"
+  data$county_name[data$county %in% c("063")] <- "Indiana"
+  data$county_name[data$county %in% c("073")] <- "Lawrence"
+  data$county_name[data$county %in% c("125")] <- "Washington"
+  data$county_name[data$county %in% c("129")] <- "Westmoreland"
+  ## change the colname from Name to Label
+  for (i in 1:length(variable_index)) {
+    colnames(data)[i] <- c(variablesubset$Label[i])
+  }
+  vname <- "" ## Define a string
+  ## Customize the variable name according to content
+  for (i in 1:length(variables)) {
+    vname <- paste(vname,"",variables[i])
+  }
+  filename <- paste(datasets[index,1],vname,"SPC") ## customize file name
+  filename <- removePunctuation(filename, preserve_intra_word_dashes = FALSE) ## remove puctuation
+  filename <- paste(filename,'.xlsx') ## change to xls name
+  wb <- createWorkbook(type="xlsx")
+  sheet <- createSheet(wb, sheetName = "sheet1")
+  xlsx.addHeader(wb, sheet, DescriptioninExcel)
+  xlsx.addLineBreak(sheet, 2)
+  xlsx.addTable(wb, sheet, data, startCol=1)
+  saveWorkbook(wb, filename)
+}
+
+downloadDatain37 <- function() {
+  variables <- read.csv("variables.csv", header = TRUE, stringsAsFactors = FALSE)
+  variablesubset <- variables[rownames(variables) %in% variable_index,] ## Get the subset from all varibels
+  variables <- variablesubset$Name ## Select out the Name column
+  variables_name <- "" ## Define a string
+  ## create the variable
+  for (i in 1:length(variables)) {
+    variables_name <- paste(variables_name,",",variables[i])
+  }
+  variables_name <- str_replace_all(variables_name, " ", "") ## remove space
+  variables_name <- substr(variables_name,2, nchar(variables_name)) ## get the variables string for api
+  geographyPA <- 'county:003,007,009,013,019,021,031,033,051,059,063,065,073,085,111,121,125,129&in=state:42'
+  url <- paste(basicurl,'?get=',variables_name,'&for=',geographyPA,'&key=',key) ## Generate the url
+  url <- str_replace_all(url, " ", "") ## remove the space
+  json_file <- fromJSON(getURL(paste(url,sep="")))
+  ## us NA instead null
+  json_file <- lapply(json_file, function(x) {
+    x[sapply(x, is.null)] <- NA
+    unlist(x)
+  })
+  data <- do.call("rbind", json_file) ## change to data frame
+  colnames(data) <- c(data[1,]) ## set the first row as column name
+  data <- data[-1,] ## remove the first row
+  data <- as.data.frame(data)
+  data$state_name <- "PA"
+  data$county_name[data$county %in% c("003")] <- "Allegheny"
+  data$county_name[data$county %in% c("005")] <- "Armstrong"
+  data$county_name[data$county %in% c("007")] <- "Beaver"
+  data$county_name[data$county %in% c("009")] <- "Bedford"
+  data$county_name[data$county %in% c("013")] <- "Blair"
+  data$county_name[data$county %in% c("019")] <- "Butler"
+  data$county_name[data$county %in% c("021")] <- "Cambria"
+  data$county_name[data$county %in% c("031")] <- "Clarion"
+  data$county_name[data$county %in% c("033")] <- "Clearfield"
+  data$county_name[data$county %in% c("051")] <- "Fayette"
+  data$county_name[data$county %in% c("059")] <- "Greene"
+  data$county_name[data$county %in% c("063")] <- "Indiana"
+  data$county_name[data$county %in% c("065")] <- "Jefferson"
+  data$county_name[data$county %in% c("073")] <- "Lawrence"
+  data$county_name[data$county %in% c("085")] <- "Mercer"
+  data$county_name[data$county %in% c("111")] <- "Somerset"
+  data$county_name[data$county %in% c("121")] <- "Venango"
+  data$county_name[data$county %in% c("125")] <- "Washington"
+  data$county_name[data$county %in% c("129")] <- "Westmoreland"
+  dataPA <- data
+  geographyMD <- 'county:001,023&in=state:24'
+  url <- paste(basicurl,'?get=',variables_name,'&for=',geographyMD,'&key=',key) ## Generate the url
+  url <- str_replace_all(url, " ", "") ## remove the space
+  json_file <- fromJSON(getURL(paste(url,sep="")))
+  ## us NA instead null
+  json_file <- lapply(json_file, function(x) {
+    x[sapply(x, is.null)] <- NA
+    unlist(x)
+  })
+  data <- do.call("rbind", json_file) ## change to data frame
+  colnames(data) <- c(data[1,]) ## set the first row as column name
+  data <- data[-1,] ## remove the first row
+  data <- as.data.frame(data)
+  data$state_name <- "MD"
+  data$county_name[data$county %in% c("001")] <- "Allegany"
+  data$county_name[data$county %in% c("023")] <- "Garrett"
+  dataMD <- data
+  geographyOH <- 'county:013,029,081,099,111,155&in=state:39'
+  url <- paste(basicurl,'?get=',variables_name,'&for=',geographyOH,'&key=',key) ## Generate the url
+  url <- str_replace_all(url, " ", "") ## remove the space
+  json_file <- fromJSON(getURL(paste(url,sep="")))
+  ## us NA instead null
+  json_file <- lapply(json_file, function(x) {
+    x[sapply(x, is.null)] <- NA
+    unlist(x)
+  })
+  data <- do.call("rbind", json_file) ## change to data frame
+  colnames(data) <- c(data[1,]) ## set the first row as column name
+  data <- data[-1,] ## remove the first row
+  data <- as.data.frame(data)
+  data$state_name <- "OH"
+  data$county_name[data$county %in% c("013")] <- "Belmont"
+  data$county_name[data$county %in% c("029")] <- "Columbiana"
+  data$county_name[data$county %in% c("081")] <- "Jefferson"
+  data$county_name[data$county %in% c("099")] <- "Mahoning"
+  data$county_name[data$county %in% c("111")] <- "Monroe"
+  data$county_name[data$county %in% c("155")] <- "Trumbull"
+  dataOH <- data
+  geographyWV <- 'county:009,029,033,049,051,061,069,077,095,103&in=state:54'
+  url <- paste(basicurl,'?get=',variables_name,'&for=',geographyWV,'&key=',key) ## Generate the url
+  url <- str_replace_all(url, " ", "") ## remove the space
+  json_file <- fromJSON(getURL(paste(url,sep="")))
+  ## us NA instead null
+  json_file <- lapply(json_file, function(x) {
+    x[sapply(x, is.null)] <- NA
+    unlist(x)
+  })
+  data <- do.call("rbind", json_file) ## change to data frame
+  colnames(data) <- c(data[1,]) ## set the first row as column name
+  data <- data[-1,] ## remove the first row
+  data <- as.data.frame(data)
+  data$state_name <- "WV"
+  data$county_name[data$county %in% c("009")] <- "Brooke"
+  data$county_name[data$county %in% c("029")] <- "Hancock"
+  data$county_name[data$county %in% c("033")] <- "Harrison"
+  data$county_name[data$county %in% c("049")] <- "Marion"
+  data$county_name[data$county %in% c("051")] <- "Marshall"
+  data$county_name[data$county %in% c("061")] <- "Mononglia"
+  data$county_name[data$county %in% c("069")] <- "Ohio"
+  data$county_name[data$county %in% c("077")] <- "Preston"
+  data$county_name[data$county %in% c("095")] <- "Tyler"
+  data$county_name[data$county %in% c("103")] <- "Wetzel"
+  dataWV <- data
+  data <- rbind(dataPA, dataMD, dataOH, dataWV)
+  ## change the colname from Name to Label
+  for (i in 1:length(variable_index)) {
+    colnames(data)[i] <- c(variablesubset$Label[i])
+  }
+  vname <- "" ## Define a string
+  ## Customize the variable name according to content
+  for (i in 1:length(variables)) {
+    vname <- paste(vname,"",variables[i])
+  }
+  filename <- paste(datasets[index,1],vname,"37") ## customize file name
+  filename <- removePunctuation(filename, preserve_intra_word_dashes = FALSE) ## remove puctuation
+  filename <- paste(filename,'.xlsx') ## change to xls name
+  wb <- createWorkbook(type="xlsx")
+  sheet <- createSheet(wb, sheetName = "sheet1")
+  xlsx.addHeader(wb, sheet, DescriptioninExcel)
+  xlsx.addLineBreak(sheet, 2)
+  xlsx.addTable(wb, sheet, data, startCol=1)
+  saveWorkbook(wb, filename)
+}
+
+downloadDatain68 <- function() {
+  variables <- read.csv("variables.csv", header = TRUE, stringsAsFactors = FALSE)
+  variablesubset <- variables[rownames(variables) %in% variable_index,] ## Get the subset from all varibels
+  variables <- variablesubset$Name ## Select out the Name column
+  variables_name <- "" ## Define a string
+  ## create the variable
+  for (i in 1:length(variables)) {
+    variables_name <- paste(variables_name,",",variables[i])
+  }
+  variables_name <- str_replace_all(variables_name, " ", "") ## remove space
+  variables_name <- substr(variables_name,2, nchar(variables_name)) ## get the variables string for api
+  geographyPA <- 'county:003,007,009,013,019,021,023,027,031,033,035,039,047,051,053,057,059,061,063,065,073,085,111,121,123,125,129&in=state:42'
+  url <- paste(basicurl,'?get=',variables_name,'&for=',geographyPA,'&key=',key) ## Generate the url
+  url <- str_replace_all(url, " ", "") ## remove the space
+  json_file <- fromJSON(getURL(paste(url,sep="")))
+  ## us NA instead null
+  json_file <- lapply(json_file, function(x) {
+    x[sapply(x, is.null)] <- NA
+    unlist(x)
+  })
+  data <- do.call("rbind", json_file) ## change to data frame
+  colnames(data) <- c(data[1,]) ## set the first row as column name
+  data <- data[-1,] ## remove the first row
+  data <- as.data.frame(data)
+  data$state_name <- "PA"
+  data$county_name[data$county %in% c("003")] <- "Allegheny"
+  data$county_name[data$county %in% c("005")] <- "Armstrong"
+  data$county_name[data$county %in% c("007")] <- "Beaver"
+  data$county_name[data$county %in% c("009")] <- "Bedford"
+  data$county_name[data$county %in% c("013")] <- "Blair"
+  data$county_name[data$county %in% c("019")] <- "Butler"
+  data$county_name[data$county %in% c("021")] <- "Cambria"
+  data$county_name[data$county %in% c("023")] <- "Cameron"
+  data$county_name[data$county %in% c("027")] <- "Centre"
+  data$county_name[data$county %in% c("031")] <- "Clarion"
+  data$county_name[data$county %in% c("033")] <- "Clearfield"
+  data$county_name[data$county %in% c("035")] <- "Clinton"
+  data$county_name[data$county %in% c("039")] <- "Crawford"
+  data$county_name[data$county %in% c("047")] <- "Elk"
+  data$county_name[data$county %in% c("051")] <- "Fayette"
+  data$county_name[data$county %in% c("053")] <- "Forest"
+  data$county_name[data$county %in% c("057")] <- "Fulton"
+  data$county_name[data$county %in% c("059")] <- "Greene"
+  data$county_name[data$county %in% c("061")] <- "Huntingdon"
+  data$county_name[data$county %in% c("063")] <- "Indiana"
+  data$county_name[data$county %in% c("065")] <- "Jefferson"
+  data$county_name[data$county %in% c("073")] <- "Lawrence"
+  data$county_name[data$county %in% c("085")] <- "Mercer"
+  data$county_name[data$county %in% c("111")] <- "Somerset"
+  data$county_name[data$county %in% c("121")] <- "Venango"
+  data$county_name[data$county %in% c("123")] <- "Warren"
+  data$county_name[data$county %in% c("125")] <- "Washington"
+  data$county_name[data$county %in% c("129")] <- "Westmoreland"
+  dataPA <- data
+  geographyMD <- 'county:001,023,043&in=state:24'
+  url <- paste(basicurl,'?get=',variables_name,'&for=',geographyMD,'&key=',key) ## Generate the url
+  url <- str_replace_all(url, " ", "") ## remove the space
+  json_file <- fromJSON(getURL(paste(url,sep="")))
+  ## us NA instead null
+  json_file <- lapply(json_file, function(x) {
+    x[sapply(x, is.null)] <- NA
+    unlist(x)
+  })
+  data <- do.call("rbind", json_file) ## change to data frame
+  colnames(data) <- c(data[1,]) ## set the first row as column name
+  data <- data[-1,] ## remove the first row
+  data <- as.data.frame(data)
+  data$state_name <- "MD"
+  data$county_name[data$county %in% c("001")] <- "Allegany"
+  data$county_name[data$county %in% c("023")] <- "Garrett"
+  data$county_name[data$county %in% c("043")] <- "Washington"
+  dataMD <- data
+  geographyOH <- 'county:007,013,019,029,055,059,067,081,099,111,121,133,151,155,167&in=state:39'
+  url <- paste(basicurl,'?get=',variables_name,'&for=',geographyOH,'&key=',key) ## Generate the url
+  url <- str_replace_all(url, " ", "") ## remove the space
+  json_file <- fromJSON(getURL(paste(url,sep="")))
+  ## us NA instead null
+  json_file <- lapply(json_file, function(x) {
+    x[sapply(x, is.null)] <- NA
+    unlist(x)
+  })
+  data <- do.call("rbind", json_file) ## change to data frame
+  colnames(data) <- c(data[1,]) ## set the first row as column name
+  data <- data[-1,] ## remove the first row
+  data <- as.data.frame(data)
+  data$state_name <- "OH"
+  data$county_name[data$county %in% c("007")] <- "Ashtabula"
+  data$county_name[data$county %in% c("013")] <- "Belmont"
+  data$county_name[data$county %in% c("019")] <- "Carroll"
+  data$county_name[data$county %in% c("029")] <- "Columbiana"
+  data$county_name[data$county %in% c("055")] <- "Geauga"
+  data$county_name[data$county %in% c("059")] <- "Guernsey"
+  data$county_name[data$county %in% c("067")] <- "Harrison"
+  data$county_name[data$county %in% c("081")] <- "Jefferson"
+  data$county_name[data$county %in% c("099")] <- "Mahoning"
+  data$county_name[data$county %in% c("111")] <- "Monroe"
+  data$county_name[data$county %in% c("121")] <- "Noble"
+  data$county_name[data$county %in% c("133")] <- "Portage"
+  data$county_name[data$county %in% c("151")] <- "Stark"
+  data$county_name[data$county %in% c("155")] <- "Trumbull"
+  data$county_name[data$county %in% c("167")] <- "Washington"
+  dataOH <- data
+  geographyWV <- 'county:001,009,017,023,027,029,033,041,049,051,057,061,065,069,073,077,085,091,093,095,097,103&in=state:54'
+  url <- paste(basicurl,'?get=',variables_name,'&for=',geographyWV,'&key=',key) ## Generate the url
+  url <- str_replace_all(url, " ", "") ## remove the space
+  json_file <- fromJSON(getURL(paste(url,sep="")))
+  ## us NA instead null
+  json_file <- lapply(json_file, function(x) {
+    x[sapply(x, is.null)] <- NA
+    unlist(x)
+  })
+  data <- do.call("rbind", json_file) ## change to data frame
+  colnames(data) <- c(data[1,]) ## set the first row as column name
+  data <- data[-1,] ## remove the first row
+  data <- as.data.frame(data)
+  data$state_name <- "WV"
+  data$county_name[data$county %in% c("001")] <- "Barbour"
+  data$county_name[data$county %in% c("009")] <- "Brooke"
+  data$county_name[data$county %in% c("017")] <- "Doddridge"
+  data$county_name[data$county %in% c("023")] <- "Grant"
+  data$county_name[data$county %in% c("027")] <- "Hampshire"
+  data$county_name[data$county %in% c("029")] <- "Hancock"
+  data$county_name[data$county %in% c("033")] <- "Harrison"
+  data$county_name[data$county %in% c("041")] <- "Lewis"
+  data$county_name[data$county %in% c("049")] <- "Marion"
+  data$county_name[data$county %in% c("051")] <- "Marshall"
+  data$county_name[data$county %in% c("057")] <- "Mineral"
+  data$county_name[data$county %in% c("061")] <- "Mononglia"
+  data$county_name[data$county %in% c("065")] <- "Morgan"
+  data$county_name[data$county %in% c("069")] <- "Ohio"
+  data$county_name[data$county %in% c("073")] <- "Pleasants"
+  data$county_name[data$county %in% c("077")] <- "Preston"
+  data$county_name[data$county %in% c("085")] <- "Ritchie"
+  data$county_name[data$county %in% c("091")] <- "Taylor"
+  data$county_name[data$county %in% c("093")] <- "Tucker"
+  data$county_name[data$county %in% c("095")] <- "Tyler"
+  data$county_name[data$county %in% c("097")] <- "Upshur"
+  data$county_name[data$county %in% c("103")] <- "Wetzel"
+  dataWV <- data
+  data <- rbind(dataPA, dataMD, dataOH, dataWV)
+  ## change the colname from Name to Label
+  for (i in 1:length(variable_index)) {
+    colnames(data)[i] <- c(variablesubset$Label[i])
+  }
+  vname <- "" ## Define a string
+  ## Customize the variable name according to content
+  for (i in 1:length(variables)) {
+    vname <- paste(vname,"",variables[i])
+  }
+  filename <- paste(datasets[index,1],vname,"68") ## customize file name
+  filename <- removePunctuation(filename, preserve_intra_word_dashes = FALSE) ## remove puctuation
+  filename <- paste(filename,'.xlsx') ## change to xls name
+  wb <- createWorkbook(type="xlsx")
+  sheet <- createSheet(wb, sheetName = "sheet1")
+  xlsx.addHeader(wb, sheet, DescriptioninExcel)
+  xlsx.addLineBreak(sheet, 2)
+  xlsx.addTable(wb, sheet, data, startCol=1)
+  saveWorkbook(wb, filename)
+}

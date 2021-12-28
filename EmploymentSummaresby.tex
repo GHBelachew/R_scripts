@@ -1,0 +1,68 @@
+# =====================================================================
+# R Scripting
+# This template script is to extract summaries by SPC Employment or any category.
+#======================================================================
+# Loading libraries == Note: some libraries will may not be needed but keep the list
+library(data.table)
+library(ggmap)
+library(ggplot2)
+library(dplyr)
+library(reshape2)
+library(reshape)
+library(plyr)
+
+#========================================================================
+# Reading Data ; path of data file and name of data source are subject to change
+
+df <- read.csv("Path/SourceData.csv")
+
+#========================================================================    
+#Data Preprocessing and Prep
+# Change employment from factor to character and then to numeric by removing the comma
+
+df$EmThisS <- as.character(df$EmThisS)
+df$EmThisS <- gsub(",", "", df$EmThisS)
+df$EmThisS <- as.numeric(df$EmThisS)
+
+# change SalesY1 from factor to character and then to numeric by removing the comma and Dollar sign
+
+df$SalesYR1 <- as.character(df$SalesYR1)
+df$SalesYR1 <- gsub(",", "", df$SalesYR1)
+df$SalesYR1 <- gsub("\\$", "", df$SalesYR1)
+df$SalesYR1 <- as.numeric(df$SalesYR1)
+
+
+# Changing Municipal code to character and padding it with leading zeros
+df$SPCcoMu <- as.character(df$SPCcoMu)
+df$SPCcoMu <- stringr::str_pad(df$SPCcoMu, 6, side = "left", pad = 0)
+
+# Do more of the above as needed
+#==========================================================================
+# Summaries
+
+#byZone
+EmpSummarybyZ  <- dcast(df, MERLAM_ZON ~ SPCCat, value.var = "EmThisS", fun.aggregate = sum)
+EmpSummarybyZ2 <-  EmpSummarybyZ[,c("MERLAM_ZON", "Manufacturing","Retail", "Services", "Other",
+"N/A (unclassified)", "NA")]
+
+#by municipality
+EmpSummarybyM  <- dcast(df, SPCcoMu + MuniNm ~ SPCCat, value.var = "EmThisS", fun.aggregate = sum)
+EmpSummarybyM2 <- EmpSummarybyM[,c("SPCcoMu","MuniNm", "Manufacturing","Retail", "Services", "Other",
+"N/A (unclassified)", "NA")] # check names of the fields as it vary b/n Mergent and Infogroup data
+
+# add any other summary  here as needed
+#============================================================================
+
+# Saving Summaries to csv.
+# 1. Summary by Zone
+write.csv(EmpSummay2,"Path/__EmpbyZone.csv", 
+col.names = TRUE, row.names = FALSE)
+
+# 2.Summary by Municipality. Send it as text so that it keeps leading zeros of the padding
+write.csv(EmpSummarybyM2,"Path/-EmpMunicipal.txt", 
+col.names = TRUE, row.names = FALSE)
+
+# add as many summaries as needed using same procedure
+
+#======================================End===================================
+

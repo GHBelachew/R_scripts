@@ -1,0 +1,84 @@
+# create shape point shape file usig xy coordinates
+library(data.table)
+library(rgdal) # Bindings for the Geospatial Data Abstraction Library
+library(raster) # Geographic Data Analysis and Modeling
+library(rgeos) # Interface to Geometry Engine - Open Source (GEOS)
+library(ggmap)
+library(data.table)
+library(ggplot2)
+library(sf)
+library(sp)
+library(maptools) # to create shape file
+library(tmap)
+
+#============= create shape file from final Lat and final Lon =======
+ 
+# Import data 
+df <- read.csv("L:/Path/file.csv", stringsAsFactors = FALSE)
+head(df)
+names(df)
+str(df)
+head(df)
+
+# Reading Excel file
+ 
+ 
+ 
+ 
+
+# subset data that is needed to create shape file ================
+
+MI20_FXY <- AllPartsData_final[c("id",
+                                             "Company.Name",
+                                             "Company.Type",
+                                             "Subsidiary.Status",
+                                             "Owns.Rents",
+                                             "Latitude",
+                                             "Longtitude")
+
+
+
+
+# because Employment had comma in the number it is imported change it as character.
+# comma should be eliminate and change character to numeric
+# using gsub command eliminate the comma from employment 
+
+MI20_FXY$EmThisS <- gsub(",", "",MI20_FXY$EmThisS) # replace the comma in employment with nothing
+str(MI20_FXY)
+MI20_FXY$EmThisS <- as.numeric(MI20_FXY$EmThisS) # Change employment from character to numeric
+MI20_FXY_Loc <- SpatialPointsDataFrame(MI20_FXY[ ,c(16,15)], MI20_FXY,
+                                   proj4string = CRS("+proj=longlat +ellips=WGS84"))
+names(MI20_FXY_Loc)
+# write the point files to shape files
+
+writeOGR(MI20_FXY_Loc, layer = 'MI20_FXY_Loc','L:/Mergent Intellect employment database/2020 Jan/GIS/Shape',driver="ESRI Shapefile")
+
+
+#==================================== Not used Start======================================================
+# Reading Merlam zone shape file 
+MerlamZ <- readOGR(dsn = "L:/Mergent Intellect employment database/2018 Jan/Compilation/R/Shape", layer = "TAZ_Cycle10_37county_Onlyin37County") # this shape file comes from the study area locaton 
+plot(MerlamZ)
+
+# redefine projection
+MerlamZproj <- spTransform(MerlamZ,CRS("+proj=longlat +ellips=WGS84")) # set projection to WGS84
+plot(MerlamZproj)
+# intersecting Mergent point with 37County merlam zones
+
+MI20_FXY_Loc_MZ <- intersect(MI20_FXY_Loc, MerlamZproj) 
+
+tm_shape(MerlamZproj) + tm_borders(alpha = .4) +
+  tm_shape(MI20_Loc) + tm_dots(col = "red", size = .05) +
+  tm_layout(title = "Businesses in  37 County Ara", title.size = .75) +
+  tm_layout(title = "Mergent  Intellect Business in 37 County Area ", title.size = .75)
+# creata data frame
+# select fields needed 
+# export to CSV
+
+MI20_37CountyData <- as.data.frame(MI20_FXY_Loc_MZ)
+colnames(MI20_37CountyData)
+
+MI20_37CountyDataFXY <- MI20_37CountyData[ ,c(1:16,20)]
+head(MI20_37CountyDataFXY)
+#Export 37County Business with Zone to csv
+write.csv(MI20_37CountyDataFXY, "L:/Mergent Intellect employment database/2020 Jan/Compilation/R/Output/MI20_37CoData_MZ.csv", row.names = FALSE)
+

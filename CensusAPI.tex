@@ -1,0 +1,88 @@
+## Open the package we need
+library(XML) ## Tools for Parsing and Generating XML Within R and S-Plus
+library(RCurl) ## General Network (HTTP/FTP/...) Client Interface for R
+library(httr) ## Tools for Working with URLs and HTTP
+library(stringr) ## Simple, Consistent Wrappers for Common String Operations
+library(rjson) ## JSON for R
+library(tm) ## Text Mining Package
+library(RJSONIO) ## Serialize R objects to JSON, JavaScript Object Notation
+
+## What datasets we can download:
+CensusAPI_url <- 'http://api.census.gov/data.html'
+CensusAPI_urldata <- GET(CensusAPI_url)
+datasets <- readHTMLTable(rawToChar(CensusAPI_urldata$content), stringsAsFactors = FALSE)
+datasets <- as.data.frame(datasets)
+colnames(datasets) <- c("Title", "Description", "Vintage", "Dataset Name", "Geography List", 
+                        "Variable List", "Tag List", "Examples", "Developer Documentation", "API BASE URL")
+write.csv(datasets, "Census API_Datasets and its descendants.csv", row.names = FALSE, na = "")
+print("Please run the code and check the Console, and remember the index.")
+print(datasets$Title)
+
+## Tell me the index
+##### !!!!! What you need to type:
+index <- 23
+basicurl <- datasets$`API BASE URL`[index]
+
+variableurl <- paste(basicurl, '/variables.html')
+variableurl <- str_replace_all(variableurl, " ", "")## remove the space in variableurl
+variableurl_data <- GET(variableurl)
+variables <- readHTMLTable(rawToChar(variableurl_data$content), stringAsFactors = FALSE)
+variables <- as.data.frame(variables)
+colnames(variables) <- c("Name", "Label", "Concept", "Required", "Predicate")
+variables$Name <- as.character(variables$Name)
+variables$Label <- as.character(variables$Label)
+variables$Concept <- as.character(variables$Concept)
+variables$Required <- as.character(variables$Required)
+variables$Predicate <- as.character(variables$Predicate)
+print("Please open the table and remember the index.")## check the table 
+
+## Tell me the index
+##### !!!!! What you need to type
+variable_index <- c(7,8,9) 
+variablesubset <- variables[rownames(variables) %in% variable_index,]
+variables <- variablesubset$Name
+variables_name <- ""
+## create the variable
+for (i in 1:length(variables)) {
+  variables_name <- paste(variables_name,",",variables[i])
+}
+variables_name <- str_replace_all(variables_name, " ", "")
+variables_name <- substr(variables_name,2, nchar(variables_name))
+
+## Tell me the geography SPC ## default
+geography <- 'county:003,007,019,051,059,063,073,125,129&in=state:42'
+
+###key
+##### !!!!! What you might need to change
+key <- 'f9f0f32785cb14f24152fa86c38fd7cf239e8a9c'
+## generate the url
+url <- paste(basicurl,'?get=',variables_name,'&for=',geography,'&key=',key)
+## delete the space in url
+url <- str_replace_all(url, " ", "")
+
+## from json to csv
+json_file <- fromJSON(url)
+## us NA instead null
+json_file <- lapply(json_file, function(x) {
+  x[sapply(x, is.null)] <- NA
+  unlist(x)
+})
+data <- do.call("rbind", json_file)
+colnames(data) <- c(data[1,])
+## remove the first row
+data <- data[-1,]
+## change the colname from Name to Label
+for (i in 1:length(variable_index)) {
+  colnames(data)[i] <- c(variablesubset$Label[i])
+}
+
+## export as csv
+vname <- ""
+for (i in 1:length(variables)) {
+  vname <- paste(vname,"",variables[i])
+}
+filename <- paste(datasets[index,1],vname,"SPC")
+## remove puctuation
+filename <- removePunctuation(filename, preserve_intra_word_dashes = FALSE)
+filename <- paste(filename,'.csv')
+write.csv(data, filename, row.names = FALSE, na="")

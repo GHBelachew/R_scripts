@@ -1,0 +1,380 @@
+# Date Feb 2019
+# Author Belachew
+
+## This script is to process Mergent data from the downloads
+## Putting together all parts of Mergent Intellect 2019 data
+
+##========================================================================================
+
+## Step 1 
+
+## Aquiring list of files file information of orginal files
+
+filenames <- list.files(path = "L:/Mergent Intellect employment database/2019 Jan/Compilation/Allfiles")
+length(filenames)  # report the the number of files
+filenames # shows the list of file names
+setwd("L:/Mergent Intellect employment database/2019 Jan/Compilation/Allfiles") # to get all the files info
+fileinfo <- file.info(filenames) # save the file info
+## fileinfo and rbind should be performed in the folder where the files are located
+rownames <- rownames(fileinfo) # grabs fileinfo
+rownames <- as.data.frame(rownames) # convert rownames to dataframe
+fileinfo2 <-cbind(rownames, fileinfo) #adds the rown names to the data frame
+rownames(fileinfo2) <-NULL # get rid of rownames
+
+
+# extract filename and time from fileinfo2
+
+FileDateTime <- fileinfo2 [, c(1,5)]
+FileDateTime$DlDate <- substring(FileDateTime$mtime,1,10)
+FileDateTime$DlTime <- substring(FileDateTime$mtime,11,20)
+
+# rename file column Name
+colnames(FileDateTime)[1] <- "newfilename"
+
+
+
+############################################################################
+## Step 2 Read data
+
+#If the path is different than your working directory
+# you'll need to set full.names = TRUE to get the full
+# paths.
+setwd("L:/Mergent Intellect employment database/2019 Jan/Compilation/R") 
+
+# this is very important command to import all files with the paths
+library(plyr)
+AllPartsData <- ldply(list.files(path="L:/Mergent Intellect employment database/2019 Jan/Compilation/R/AllData/",pattern="csv",full.names=TRUE),function(filename) { 
+  dum=read.csv(filename, colClasses = "character") 
+  dum$filename=filename 
+  return(dum) 
+}) 
+
+# Preliminary checks
+head(AllPartsData) # see head of daf
+colnames(AllPartsData) # see columns
+nrow(AllPartsData)
+ncol(AllPartsData) # includes the path name
+str(AllPartsData)
+
+
+
+
+# need to change some needed fields to numric
+AllPartsData$Latitude <- as.numeric(AllPartsData$Latitude)
+AllPartsData$Longtitude <- as.numeric(AllPartsData$Longtitude)
+# need to change others as needed 
+str(AllPartsData)
+
+# send commpiled raw data to csv
+M19_Alldata <- AllPartsData[ ,c(1:length(AllPartsData)-1)] # exclude Path (last Clumn) in exporting because it is file path name 
+
+write.csv(M19_Alldata, "L:/Mergent Intellect employment database/2019 Jan/Compilation/R/Output/M19_Alldata.csv", row.names = TRUE,col.names = TRUE)
+
+#============================================================================================================
+
+## Step 3
+# This part of the script is to check  and identify duplicates  and apply only forthis virson of download
+library(data.table)
+RecordCount <- as.data.frame(table(M19_Alldata$D.U.N.S..Number))
+unique(RecordCount$Freq) # this rusulted in few duplicates  ( 36, blank and  3 dups with two recoreds in each)
+subset(RecordCount,RecordCount$Freq %in% 2)
+
+# check duplicate ("05-472-3904", "09-584-6163", "84-196-6182") are the ones withdup
+
+dups <- subset(AllPartsData,AllPartsData$D.U.N.S..Number %in% c("05-472-3904", "09-584-6163", "84-196-6182"))
+dups2 <- subset(AllPartsData,AllPartsData$D.U.N.S..Number %in% c(""))
+head(dups)
+
+U_records <- unique(AllPartsData$D.U.N.S..Number)
+dim(as.data.frame(U_records))
+# count us 813276 is true
+
+#===========================================================================================================
+## Step 4
+
+# Getting file name from the path and eliminat the path 
+
+fn <- as.data.frame(basename(AllPartsData$filename)) # basename is the command to get the file name from the path
+
+AllPartsData$newfilename <- fn$`basename(AllPartsData$filename)` # add unique file name to each record
+
+head(AllPartsData)
+# merging or joining data table and date time table 
+AllPartsData_DT <- merge(AllPartsData, FileDateTime, by ="newfilename", all.AllPartsData=TRUE)
+head(AllPartsData_DT)
+# create and add StateCounty name filed from Physical state and phaysical county
+
+AllPartsData_DT$StateCountyn <- paste(AllPartsData_DT$Physical.State, "-", AllPartsData_DT$Physical.County)
+head(AllPartsData_DT)
+###========================================================================================================
+
+## adding physical county fips code to the records
+# read county fips list
+
+FipsStateCounty <- read.csv("L:/Mergent Intellect employment database/2016 Apr/Compilation/R/Indexfiles/FIPSStateCounty.csv", header = T, colClasses = "character")
+
+# create StateCountyn  field for joining with  data state and county
+FipsStateCounty$StateCountyn <- paste(FipsStateCounty$State,"-",FipsStateCounty$CountyName)
+FipsStateCounty4j <- FipsStateCounty[,c(6,5)] # state and county names are selected
+
+# join and transfer county fips to main data
+AllPartsData_DT_Fips <- merge(AllPartsData_DT, FipsStateCounty4j, by ="StateCountyn", all.AllPartsData_DT=TRUE)
+
+#Create four digt NAICS field for joining REmi code and SPC employment categoyt
+
+AllPartsData_DT_Fips$FourdigNaics <- substring(AllPartsData_DT_Fips$Primary.NAICS.Code,1,4)
+
+#==========================================================================================================
+## Get remi and spc category assingnment
+##Read csv table of remi and spc employment category
+
+# to be continued
+
+
+Empcode <- read.csv("L:/Mergent Intellect employment database/2019 Jan/Compilation/R/Index/2017_NAICS-REMICodes_Final.csv", header = T, stringsAsFactors = FALSE)
+str(Empcode)
+
+
+library(dplyr)
+
+AllPartsData_DT_Fips_Empc <-left_join(AllPartsData_DT_Fips, Empcode, by ="FourdigNaics", copy=F)
+##P1_alldata_DT_Fips_Empc <-merge(P1_alldata_DT_Fips, Empcode, by ="FourdigNaics", all.P1_alldata_DT_Fips=TRUE)
+## Take out( remove not needed fields)
+AllPartsData_final <- subset(AllPartsData_DT_Fips_Empc, select = -c(FourdigNaics,StateCountyn,newfilename,filename,mtime,Three_digNAICS,FourdigNAICSTitle))
+
+
+# This years data is not in order. The order is not as ued to be hence should be reorderd to the be the same as the last yearrs
+
+colnames(AllPartsData_final)
+
+AllPartsData_final_R <- AllPartsData_final[c("D.U.N.S..Number",
+                                             "Company.Name",
+                                             "Company.Type",
+                                             "Subsidiary.Status",
+                                             "Owns.Rents",
+                                             "Latitude",
+                                             "Longtitude",
+                                             "Manufacturing.Indicator",
+                                             "Minority.Owned.Indicator",
+                                             "Phone.No",
+                                             "Line.of.Business",
+                                             "Fax.No",
+                                             "Web.Address..URL.",
+                                             "Import.Export",
+                                             "Global.Duns.No",
+                                             "Global.Name",
+                                             "Immediate.Parent.Duns.No",
+                                             "Immediate.Parent.Name",
+                                             "Year.of.Founding",
+                                             "Marketing.Prescreen.Score",
+                                             "Marketing.Prescreen.Ranking",
+                                             "Physical.Address",
+                                             "Physical.City",
+                                             "Physical.State",
+                                             "Physical.County",
+                                             "Physical.Country",
+                                             "Physical.Zipcode",
+                                             "Mailing.Address",
+                                             "Mailing.City",
+                                             "Mailing.State",
+                                             "Mailing.County",
+                                             "Mailing.Country",
+                                             "Mailing.Zipcode",
+                                             "Location.Type",
+                                             "Primary.SIC.Code",
+                                             "Primary.NAICS.Code",
+                                             "Primary.SIC.Description",
+                                             "Primary.NAICS.Description",
+                                             "Secondary.SIC.Code",
+                                             "Secondary.NAICS.Code",
+                                             "Secondary.SIC.Description",
+                                             "Secondary.NAICS.Description",
+                                             "Sales",
+                                             "Employee.All.Sites",
+                                             "Employee.this.Site",
+                                             "Sales..Year.1.",
+                                             "Employees.Total..Year.1.",
+                                             "Facility.Size",
+                                             "Auditors",
+                                             "Rank.Type",
+                                             "DlDate",
+                                             "DlTime",
+                                             "FIPSStateCounty",
+                                             "SPCcatCD",
+                                             "SPCCategory",
+                                             "REMISectorCode",
+                                             "REMIEmploymentSector")]
+
+# Export data to csv
+
+write.csv(AllPartsData_final_R, "L:/Mergent Intellect employment database/2019 Jan/Compilation/R/Output/AllParts_Jan19Data.csv", row.names = TRUE,col.names = TRUE)
+#=======================================================================================================================
+
+
+
+# find the records from MI19 that are in the MI15 moved
+# Read MI15 hand moved records. This are know as also known coordinate records
+MI15HMoved <- read.csv("L:/Mergent Intellect employment database/2019 Jan/Compilation/ComparisonMovedRecordsMi15vsMi19/MI15_handMovedCooredinateFullRecords_selectedFields.csv",stringsAsFactors = FALSE)
+
+# get all the redords from MI19 that match MI15HMoved
+MI19inMI15Moved <- subset(AllPartsData_final_R,AllPartsData_final_R$D.U.N.S..Number %in% MI15HMoved$DUNNoV)
+
+# get selected fields from MI15Moved to join to the MI19 in the moved
+colnames(MI15HMoved)
+MI15HMovedSel <- MI15HMoved[ ,c("DUNNoV","Company","lat","lon","StAdrs","StCity","FinalLat","FinalLon")]
+
+#Rename columns so that the field names are not mixing up
+names(MI15HMovedSel)[1:8] <-c("DUNNoVMI15","CompanyMI15","latMI15","lonMI15","StAdrsMI15","StCityMI15","FinalLatMI15","FinalLonMI15")
+
+# join MI19inMI15Moved with MI15HMovedSel based on Dunsnumber
+colnames(MI19inMI15Moved)
+
+library(data.table)
+MI15HMovedSel$DN15 <-MI15HMovedSel$DUNNoVMI15 # add DUN number 15 because the join will not carry the joiner as extra field.
+MI19vsMI15HMComp <- merge(MI19inMI15Moved,MI15HMovedSel, by.x ="D.U.N.S..Number",by.y ="DUNNoVMI15", all.x=TRUE)
+
+# export this file to csv to use it for address compariosn
+
+write.csv(MI19vsMI15HMComp,"L:/Mergent Intellect employment database/2019 Jan/Compilation/ComparisonMovedRecordsMi15vsMi19/MI19vsMI15HandMovedCompOfAddress.csv", row.names = FALSE)
+
+
+
+
+
+
+#===================================================================================================
+
+
+## Getting by parts (to send out to csv files)
+## PArt 1: composes of SPC reion
+# M16_SPCRegion <- subset(AllPartsData_final,
+#             FIPSStateCounty=="42003"|
+#             FIPSStateCounty=="42005"|
+#             FIPSStateCounty=="42007"|
+#             FIPSStateCounty=="42019"|
+#             FIPSStateCounty=="42051"|
+#             FIPSStateCounty=="42059"|
+#             FIPSStateCounty=="42063"|
+#             FIPSStateCounty=="42073"|
+#             FIPSStateCounty=="42125"|
+#             FIPSStateCounty=="42129"
+#            )
+
+## Subset data by parts and region (SPC Region, 27 County Region and 31 County areas
+
+#M18_SPCRegion<- subset(AllPartsData_final, subset = FIPSStateCounty %in% c(42003,42005,42007,42019,42051,42059,42063,42073,42125,42129))
+
+#M18_31County_in <- subset(AllPartsData_final, subset = FIPSStateCounty %in% c(24001,24023,39013,39029,39081,39099,39111,39155,42009,42013,
+#                                                                           42021,42031,42033,42065,42085,42111,42121,54009,54029,54033,
+#                                                                           54049,54051,54061,54069,54077,54095,54103, 42039, 42053, 42123,42049))
+
+#M18_31County_out <- subset(AllPartsData_final, subset = FIPSStateCounty %in% c(24043,36013,36009, 39007,39019,39055,39059,39067,39121,39133,39151,39167,
+#                                                                          42023,42027,42035,42047,42057,42061,42083,54001,
+#                                                                         54017,54023,54027,54041,54057,54065,54073,54085,54091,54093,54097))
+
+
+#write.csv(M18_SPCRegion, "L:/Mergent Intellect employment database/2018 Jan/Compilation/R/Output/M18_SPCRegion.csv", row.names = TRUE,col.names = TRUE)
+#write.csv(M18_31County_in, "L:/Mergent Intellect employment database/2018 Jan/Compilation/R/Output/M18_31County_in.csv", row.names = TRUE,col.names = TRUE)
+#write.csv(M18_31County_out, "L:/Mergent Intellect employment database/2018 Jan/Compilation/R/Output/M18_31County_out.csv", row.names = TRUE,col.names = TRUE)
+
+## ================================================================
+
+# Statistics
+
+table(AllPartsData_final$FIPSStateCounty)
+
+NumberOfRec <- count(AllPartsData_final, AllPartsData_final$FIPSStateCounty)
+
+
+sum(NumberOfRec$n)
+#==========================================================================
+#==========================================================================
+# create shape point shape file usig xy coordinates
+library(data.table)
+library(rgdal) # Bindings for the Geospatial Data Abstraction Library
+library(raster) # Geographic Data Analysis and Modeling
+library(rgeos) # Interface to Geometry Engine - Open Source (GEOS)
+library(ggmap)
+library(data.table)
+library(ggplot2)
+library(sf)
+library(sp)
+library(maptools) # to create shape file
+library(tmap)
+
+
+#============= create shape file with original lon,lat
+MI19 <- read.csv("L:/Mergent Intellect employment database/2019 Jan/Compilation/R/Output/AllParts_Jan19Data_v2_GIS.csv", stringsAsFactors = FALSE)
+head(MI19)
+names(MI19)
+str(MI19)
+head(MI19)
+# becuse Employment had comma in the number it is imported as chanracer.
+# comma should be eliminateand thange charact to numeric
+# usig gsub command eliminae the comma from employment 
+
+MI19$EmThisS <- gsub(",", "",MI19$EmThisS) # replace the comma in employment with nothing
+str(MI19)
+MI19$EmThisS <- as.numeric(MI19$EmThisS) # Change employment from character to numeric
+MI19_Loc <- SpatialPointsDataFrame(MI19[ ,c(5,4)], MI19,
+                                                  proj4string = CRS("+proj=longlat +ellips=WGS84"))
+names(MI19_Loc)
+# write the point files to shape files
+writeOGR(MI19_Loc, layer = 'MI19_Loc','L:/Mergent Intellect employment database/2019 Jan/GIS/Shape',driver="ESRI Shapefile")
+              
+
+#=============
+#============= create shape file with Finallon,lat
+MI19_FXY <- read.csv("L:/Mergent Intellect employment database/2019 Jan/Compilation/R/Output/AllParts_Jan19Data_v3_GIS_withFinalXY.csv", stringsAsFactors = FALSE)
+head(MI19_FXY)
+names(MI19_FXY)
+str(MI19_FXY)
+head(MI19_FXY)
+# becuse Employment had comma in the number it is imported as chanracer.
+# comma should be eliminateand thange charact to numeric
+# usig gsub command eliminae the comma from employment 
+
+MI19_FXY$EmThisS <- gsub(",", "",MI19_FXY$EmThisS) # replace the comma in employment with nothing
+str(MI19_FXY)
+MI19_FXY$EmThisS <- as.numeric(MI19_FXY$EmThisS) # Change employment from character to numeric
+MI19_FXY_Loc <- SpatialPointsDataFrame(MI19_FXY[ ,c(16,15)], MI19_FXY,
+                                   proj4string = CRS("+proj=longlat +ellips=WGS84"))
+names(MI19_FXY_Loc)
+# write the point files to shape files
+writeOGR(MI19_FXY_Loc, layer = 'MI19_FXY_Loc','L:/Mergent Intellect employment database/2019 Jan/GIS/Shape',driver="ESRI Shapefile")
+
+
+#==================================== Not used Start======================================================
+# Plotting the shape files
+#PittsburghMap <- qmap(location = "Pittsburgh", zoom =11)
+#MI18_Plot <- PittsburghMap + geom_point(aes(x = Longtitude, y = Latitude, group = factor(D.U.N.S..Number)), colour = "red", size=.2, data = MI18)
+#MI18_Plot
+# get meerlam Zone files
+MerlamZ <- readOGR(dsn = "L:/Mergent Intellect employment database/2018 Jan/Compilation/R/Shape", layer = "TAZ_Cycle10_37county_Onlyin37County") # this shape file comes from the study area locaton 
+plot(MerlamZ)
+# redefine projection
+MerlamZproj <- spTransform(MerlamZ,CRS("+proj=longlat +ellips=WGS84")) # set projection to WGS84
+plot(MerlamZproj)
+# intersecting Mergent point with 37County merlam zones
+MI19_FXY_Loc_MZ <- intersect(MI19_FXY_Loc, MerlamZproj) 
+
+tm_shape(MerlamZproj) + tm_borders(alpha = .4) +
+  tm_shape(MI19_FXY_Loc_MZ) + tm_dots(col = "red", size = .05) +
+  tm_layout(title = "Businesses in  37 County Ara", title.size = .75) +
+  tm_layout(title = "Mergent  Intellect Business in 37 County Area ", title.size = .75)
+# creata data frame
+# select fields needed 
+# export to CSV
+
+MI19_37CountyData <- as.data.frame(MI19_FXY_Loc_MZ)
+colnames(MI19_37CountyData)
+
+MI19_37CountyDataFXY <- MI19_37CountyData[ ,c(1:16,20)]
+head(MI19_37CountyDataFXY)
+#Export 37County Business with Zone to csv
+write.csv(MI19_37CountyDataFXY, "L:/Mergent Intellect employment database/2019 Jan/Compilation/R/Output/MI19_37CoData_MZ.csv", row.names = FALSE)
+
+#===================================== Not used end =====================================================
+
+
+

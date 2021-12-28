@@ -1,0 +1,25 @@
+# create shape point shape file using xy coordinates
+library(data.table)
+library(rgdal) # Bindings for the Geo spatial Data Abstraction Library
+library(raster) # Geographic Data Analysis and Modeling
+library(rgeos) # Interface to Geometry Engine - Open Source (GEOS)
+library(ggmap)
+library(data.table)
+library(ggplot2)
+library(sf)
+library(sp)
+library(maptools) # to create shape file
+library(tmap)
+
+df1 <- read.csv("L:/Belachew/2020/Butler_Infra2020/Data/MI_19_Butler_Alleg_Infra.csv", stringsAsFactors = FALSE)
+
+
+                 
+df1$EmThisS <- gsub(",", "",df1$EmThisS) # replace the comma in employment with nothing
+str(df1)
+df1$EmThisS <- as.numeric(df1$EmThisS) # Change employment from character to numeric
+MI19_Alleg_Butler <- SpatialPointsDataFrame(df1[ ,c("FinalLon","FinalLat")], df1,
+                                   proj4string = CRS("+proj=longlat +ellips=WGS84"))
+names(MI19_Alleg_Butler)
+# write the point files to shape files
+writeOGR(MI19_Alleg_Butler, layer = 'MI19_Alleg_Butler','L:/Belachew/2020/Butler_Infra2020/Shape',driver="ESRI Shapefile")
